@@ -2,11 +2,15 @@
 :- use_module(filter).
 :- use_module(library(lists)).
 
+%based off of geographyq.pl from class
+
+[api_call].
+[filter].
 %https://www.iata.org/en/publications/directories/code-search/
 
 %What is a flight from HND to JFK under 900 dollars between June and July?
 %What is the cheapest flight from HND to JFK under 900 dollars between June and July?
-%What is the ealriest flight from PAR to YVR starting from 10 dollars in September?
+%What is the earliest flight from PAR to YVR starting from 10 dollars in September?
 %Is there a flight between 100 and 800 dollars from ICN to NRT before August 8, 2021?
 %What flights are there between January and March from YVR to SYD over 300 dollars?
 %Are there any flights after May 25, 2021 from BKK to TPE between 400 and 800 dollars?
@@ -19,18 +23,19 @@
 
 %--- functions to ask user ---
 
-% get_constraints_from_question(Q,A,C) is true if C is the constraints on A to infer question Q
+% get_constraints_from_question(Q,C) is true if C is the constraints from Q
 get_constraints_from_question(Q,C) :-
 question(Q,End,C,[]),
 member(End,[[],['?'],['.']]).
 
+%based on the adjective given, filter results received
 handle_adj(cheapest,Ans,Ans2) :-
     compare_multiple_res_price(Ans,Ans2).
 handle_adj(earliest,Ans,Ans2) :-
     earliest_res_flight(Ans,Ans2).
 handle_adj(none,Ans,Ans).
 
-% ask(Q,Data) gives answer A to question Q, and also gives back the constraints it found
+% ask(Q,C) calls api to answer question Q, and also gives back the constraints it found
 ask(Q,C) :-
     get_constraints_from_question(Q,C),
     remove_adj(C,ADJ,C_list),
@@ -39,7 +44,7 @@ ask(Q,C) :-
     handle_adj(ADJ,Ans,Ans2),
     parse_list_flights(Ans2).
 
-%remove_adj, the adjective is not going to be used in the API call, but we might want to use it
+%remove_adj, the adjective is not going to be used in the API call, but keep track of what was removed
 %to filter results
 remove_adj(C,cheapest,C_list) :-
 member(cheapest,C),
@@ -51,30 +56,32 @@ remove_adj(C,none,C) :-
 \+ member(earliest,C),
 \+ member(cheapest,C).
 
-get_dest([],D).
-get_dest([destination(_,D)|T],D).
+%get the destination from the input
+get_dest([],_).
+get_dest([destination(_,D)|_],D).
 get_dest([time_range(_,_)|T],D) :- get_dest(T,D).
 get_dest([price_range(_,_)|T],D) :- get_dest(T,D).
+get_dest([earliest|T],D) :- get_dest(T,D).
+get_dest([cheapest|T],D) :- get_dest(T,D).
 
 
-%[time_range("2021-05-25", any), destination('BKK', 'YVR'), price_range(9, 30)]
-check_hotels(yes,C,Data) :-
+%call the api to see hotels by the destinattion
+check_hotels(yes,C) :-
     get_dest(C,Dst),
     get_api_hotel(Dst,Data),
     get_hotel_results(Data,R),
     print_hotels(R).
-
-check_hotels('Yes',C,Data) :-
+check_hotels('Yes',C) :-
     get_dest(C,Dst),
     get_api_hotel(Dst,Data),
     get_hotel_results(Data,R),
     print_hotels(R).
+check_hotels(no,_).
+check_hotels('No',_).
 
-check_hotels(no,_,_).
-check_hotels('No',_,_).
-
-hotel_call([H|T],Constraints) :-
-    check_hotels(H, Constraints,Data).
+%call the check_hotels function
+hotel_call([H|_],Constraints) :-
+    check_hotels(H, Constraints).
 
 % To get the input from a line:
 q() :-
@@ -88,7 +95,7 @@ q() :-
 % ------------- functions to parse input ------------------
 
 % A noun phrase is a determiner followed by adjectives followed
-% by a noun followed by an optional modifying phrase:
+% by a noun followed by an optional connecting phrase and modifying phrase:
 flight_query(L0,L5,C0,C5) :-
 det(L0,L1,C0,C1),
 adjectives(L1,L2,C1,C2),
@@ -286,14 +293,13 @@ string_concat(YM,"-",MS),
 string_concat(MS,Day,Res).
 
 
-%these adjectives will require parsing through the list of valid flights that meet all other requirements, don't know if that's what we want to do
-
 % adj(L0,L1,Entity,C0,C1) is true if L0-L1
 % is an adjective that imposes constraints C0-C1 Entity
 adj([cheapest | L],L, [cheapest|C],C).
 adj([earliest | L],L, [earliest|C],C).
 adj([first | L],L, [earliest|C],C).
 
+%flight and flights are the nouns that will be given, we will not use these
 noun([flight | L],L,C,C).
 noun([flights | L],L,C,C).
 
@@ -312,15 +318,13 @@ question(['Are',there,any | L0],L1,C0,C1) :-
 flight_query(L0,L1,C0,C1).
 
 
-
-%possible parameters
+%possible constraints
 %[price_range(50, 100), destination('YVR', 'NRT'),time_range("2021-03-03", "2021-06-18")]
 
 %--- functions to extract what we need from results ---
 
 % Data is a dictionary, the result returneed from the API
 get_results(Data,R) :-
-%res_data(Data),
 D = Data.get(data),
 extract_flights(D,R).
 
@@ -359,19 +363,20 @@ F = one_flight(D_at,D_code,A_at,A_code,C),
 parse_segment(T,Flist).
 
 %------- parse hotel results ----
+%get the results from the api and parse them
 get_hotel_results(Data,R) :-
-%res_data(Data),
-D = Data.get(data),
-parse_hotels(D,R).
+    D = Data.get(data),
+    parse_hotels(D,R).
 
-
+%find the relevant information from the JSON dictionary
 parse_hotels([],[]).
 parse_hotels([H|T], [hotel(name(Name),desc(D_text)) | List]) :-
     Hotel = H.get(hotel),
     Description = Hotel.get(description),
     D_text = Description.get(text),
     Name = Hotel.get(name),
-    parse_hotels(T,List).
+    parse_hotels(T,List),
+    !.
 parse_hotels([H|T], [hotel(name(Name),desc("none")) | List]) :-
     Hotel = H.get(hotel),
     Name = Hotel.get(name),
@@ -387,7 +392,6 @@ nl,
 nl,
 parse_flights(H,Result),
 write("A flight option with associated connections and overall price is listed below:"), flush_output(current_output),
-
 write(Result),
 nl,
 nl,
@@ -440,6 +444,7 @@ one_flight(_,_,_,_,_).
 price(_,_).
 res_flight([_],price(_,_)).
 
+%print the resultts from the hotel calls in a nice readable form
 print_hotels([]).
 print_hotels([hotel(name(Name),desc(Desc)) |T]):-
 nl,
@@ -450,7 +455,3 @@ write(Desc),
 nl,
 nl,
 print_hotels(T).
-
-dict(X) :-
-X = test_dict{data:[_1324{id:"1", instantTicketingRequired:false, itineraries:[_1098{duration:"PT14H15M", segments:[_960{aircraft:_944{code:"333"}, arrival:_928{at:"2021-11-01T16:50:00", iataCode:"MNL", terminal:"2"}, blacklistedInEU:false, carrierCode:"PR", departure:_912{at:"2021-11-01T11:35:00", iataCode:"SYD", terminal:"1"}, duration:"PT8H15M", id:"1", number:"212", numberOfStops:0, operating:_952{carrierCode:"PR"}}, _1054{aircraft:_1038{code:"320"}, arrival:_1026{at:"2021-11-01T21:50:00", iataCode:"BKK"}, blacklistedInEU:false, carrierCode:"PR", departure:_1010{at:"2021-11-01T19:20:00", iataCode:"MNL", terminal:"1"}, duration:"PT3H30M", id:"2", number:"732", numberOfStops:0, operating:_1046{carrierCode:"PR"}}]}], lastTicketingDate:"2021-11-01", nonHomogeneous:false, numberOfBookableSeats:9, oneWay:false, price:_1146{base:"252.00", currency:"EUR", fees:[_1116{amount:"0.00", type:"SUPPLIER"}, _1134{amount:"0.00", type:"TICKETING"}], grandTotal:"351.03", total:"351.03"}, pricingOptions:_1176{fareType:["PUBLISHED"], includedCheckedBagsOnly:true}, source:"GDS", travelerPricings:[_1300{fareDetailsBySegment:[_1234{cabin:"ECONOMY", class:"E", fareBasis:"EOBAU", includedCheckedBags:_1222{weight:25, weightUnit:"KG"}, segmentId:"1"}, _1276{cabin:"ECONOMY", class:"E", fareBasis:"EOBAU", includedCheckedBags:_1264{weight:25, weightUnit:"KG"}, segmentId:"2"}], fareOption:"STANDARD", price:_1200{base:"252.00", currency:"EUR", total:"351.03"}, travelerId:"1", travelerType:"ADULT"}], type:"flight-offer", validatingAirlineCodes:["PR"]}, _1810{id:"2", instantTicketingRequired:false, itineraries:[_1584{duration:"PT16H35M", segments:[_1446{aircraft:_1430{code:"333"}, arrival:_1414{at:"2021-11-01T16:50:00", iataCode:"MNL", terminal:"2"}, blacklistedInEU:false, carrierCode:"PR", departure:_1398{at:"2021-11-01T11:35:00", iataCode:"SYD", terminal:"1"}, duration:"PT8H15M", id:"3", number:"212", numberOfStops:0, operating:_1438{carrierCode:"PR"}}]}], lastTicketingDate:"2021-11-01", nonHomogeneous:false, numberOfBookableSeats:9, oneWay:false, price:_1632{base:"252.00", currency:"EUR", fees:[_1602{amount:"0.00", type:"SUPPLIER"}, _1620{amount:"0.00", type:"TICKETING"}], grandTotal:"351.03", total:"351.03"}, pricingOptions:_1662{fareType:["PUBLISHED"], includedCheckedBagsOnly:true}, source:"GDS", travelerPricings:[_1786{fareDetailsBySegment:[_1720{cabin:"ECONOMY", class:"E", fareBasis:"EOBAU", includedCheckedBags:_1708{weight:25, weightUnit:"KG"}, segmentId:"3"}, _1762{cabin:"ECONOMY", class:"E", fareBasis:"EOBAU", segmentId:"4"}], fareOption:"STANDARD", price:_1686{base:"252.00", currency:"EUR", total:"351.03"}, travelerId:"1", travelerType:"ADULT"}], type:"flight-offer", validatingAirlineCodes:["PR"]}], dictionaries:_1950{aircraft:_1918{'320':"AIRBUS A320", '321':"AIRBUS A321", '333':"AIRBUS A330-300"}, carriers:_1942{'PR':"PHILIPPINE AIRLINES"}, currencies:_1934{'EUR':"EURO"}, locations:_1902{'BKK':_1866{cityCode:"BKK", countryCode:"TH"}, 'MNL':_1878{cityCode:"MNL", countryCode:"PH"}, 'SYD':_1890{cityCode:"SYD", countryCode:"AU"}}}, meta:_882{count:2, links:_874{self:"https://test.api.amadeus.com/v2/shopping/flight-offers?originLocationCode=SYD&destinationLocationCode=BKK&departureDate=2021-11-01&adults=1&max=2"}}}.
-

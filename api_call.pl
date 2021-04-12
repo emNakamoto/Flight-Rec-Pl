@@ -6,14 +6,14 @@
 
 %https://www.iata.org/en/publications/directories/code-search/
 
-
 flight_offer_url("https://test.api.amadeus.com/v2/shopping/flight-offers?currencyCode=CAD&adults=1&max=5").
 
 hotel_url("https://test.api.amadeus.com/v2/shopping/hotel-offers?cityCode=").
 
 %token valid for 30 minutes
-token('8LsciVh4YpI3BrBNRujj7MD4NGG4').
+token('X').
 
+%dall the api
 make_api_call(URL,Data) :-
 token(T),
 setup_call_cleanup(
@@ -23,6 +23,7 @@ close(In)
 ).
 
 % ------- function to build query ---
+%parse through our constraints to figure out the API url
 parse_query_offers_params([], []).
 parse_query_offers_params([price_range(_,Max)|T], [Param|P]) :-
     dif(Max,any),
@@ -49,17 +50,18 @@ parse_query_offers_params([time_range(D1,D2)|T], [Param|P]) :-
     parse_query_offers_params(T, P).
 
 
-
 % Bi-directional conversion from predicate constraint to key-value pair
 parse_offers_param(dest(Destination), keyPair('destinationLocationCode', Destination)).
 parse_offers_param(source(Src), keyPair('originLocationCode', Src)).
 parse_offers_param(maxPrice(Price), keyPair('maxPrice', Price)).
 parse_offers_param(date(D), keyPair('departureDate', D)).
 
+%create the url from the constraints and call the api
 get_api_results(Constraints, Data) :-
     make_url(Constraints,URL),
     make_api_call(URL, Data).
 
+%create the url from the constraints
 make_url(Constraints, URL) :-
     flight_offer_url(U),
     parse_query_offers_params(Constraints, Params),
@@ -80,7 +82,7 @@ make_query_param(Key, Val, Param) :-
     string_concat("=", Val, Back),
     string_concat(Front, Back, Param).
 
-
+%make the url to get nearby hotels and call the api
 get_api_hotel(Dst,Data) :-
     hotel_url(X),
     string_concat(X,Dst,URL),
