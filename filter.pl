@@ -63,7 +63,8 @@ earliest_res_flight(List,E1):-
     list_date_times(List,Months,Days,Hours,Minutes,Resflights),
     find_earliest_date(Months,Days,Resflights,E1),
     find_earliest_time(Hours,Minutes,Resflights,E2),
-    dif(E1,E2).
+    dif(E1,E2),
+    !.
 
 earliest_res_flight(List,E2):-
     list_date_times(List,Months,Days,Hours,Minutes,Resflights),
@@ -76,7 +77,8 @@ earliest_res_flight(List,E2):-
 find_earliest_date(Months,Days,Resflights,E1):-
     find_min(Months,Resflights,E1),
     find_min(Days,Resflights,E2),
-    dif(E1,E2).
+    dif(E1,E2),
+    !.
 
 %If finding the min of month and min of day results in the same answer, suggests
 % the months are the same, but the days are different.
@@ -89,7 +91,8 @@ find_earliest_date(Months,Days,Resflights,E2):-
 find_earliest_time(Hours,Minutes,Resflights,E1):-
     find_min(Hours,Resflights,E1),
     find_min(Minutes,Resflights,E2),
-    dif(E1,E2).
+    dif(E1,E2),
+    !.
 
 %If finding the min of hours and min of minutes results in the same answer, suggests
 % the hours are the same, but the minutes are different.
